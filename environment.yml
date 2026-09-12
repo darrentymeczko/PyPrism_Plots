@@ -1,0 +1,19 @@
+name: pyprism
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - git>=2.45
+  - gh>=2.80
+  - pip>=24
+  - matplotlib>=3.8
+  - numpy>=1.26
+  - pandas>=2.1
+  - seaborn>=0.13
+  - jupyterlab>=4
+  - pytest>=8
+  - pytest-cov>=5
+  - ruff>=0.8
+  - pip:
+      - -e .[dev]
