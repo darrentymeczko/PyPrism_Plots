@@ -1,6 +1,6 @@
 # PyPrism Plot
 
-Prism-inspired, publication-ready styling for Python's Matplotlib and Seaborn
+GraphPrism-inspired, publication-ready styling for Python's Matplotlib and Seaborn
 ecosystem. PyPrism Plot provides a focused theme, curated discrete palettes, and
 statistical annotation helpers while leaving plotting and data manipulation to the
 libraries you already use.
