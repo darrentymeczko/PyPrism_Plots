@@ -7,8 +7,7 @@ libraries you already use.
 
 ## Install, import, and plot
 
-PyPrism Plot is a regular Python library. **You do not need to activate a special
-Conda environment or launch a separate application.** Install it into the Python
+PyPrism Plot is a regular Python library. Install it into the Python
 environment you already use:
 
 ```bash
