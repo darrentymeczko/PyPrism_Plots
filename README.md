@@ -90,6 +90,23 @@ ax.bar(range(4), values, color=colors)
 ppp.significance_bar(ax, 0, 3, y=5.2, text="p < 0.01")
 ```
 
+The default significance bracket is sized for publication figures. Its height,
+line width, label size, and label spacing can all be adjusted independently:
+
+```python
+ppp.significance_bar(
+    ax,
+    0,
+    3,
+    y=5.2,
+    text="p < 0.01",
+    height=0.2,
+    line_width=2.0,
+    font_size=14,
+    text_offset=0.08,
+)
+```
+
 ## Features
 
 - Clean white panels, bold typography, outward ticks, heavy axes, and no grid
