@@ -5,12 +5,91 @@ ecosystem. PyPrism Plot provides a focused theme, curated discrete palettes, and
 statistical annotation helpers while leaving plotting and data manipulation to the
 libraries you already use.
 
+## Install, import, and plot
+
+PyPrism Plot is a regular Python library. **You do not need to activate a special
+Conda environment or launch a separate application.** Install it into the Python
+environment you already use:
+
+```bash
+python -m pip install git+https://github.com/darrentymeczko/PyPrism_Plots.git
+```
+
+Then import it alongside Matplotlib and call its functions directly:
+
+```python
+import matplotlib.pyplot as plt
+import pyprism_plot as ppp
+
+# Apply the style to all Matplotlib plots created from this point onward.
+ppp.use_prism(palette="colorblind_safe")
+
+fig, ax = plt.subplots()
+ax.plot([1, 2, 3, 4], [2.1, 3.4, 3.8, 5.2], marker="o")
+ax.set(xlabel="Time (hours)", ylabel="Response", title="Treatment response")
+plt.show()
+```
+
+The package name used during installation is `pyprism-plot`, while the import name
+is `pyprism_plot`.
+
 > [!NOTE]
 > This independent open-source project is not affiliated with, endorsed by, or
 > sponsored by GraphPad Software. GraphPad and Prism are trademarks of their
 > respective owner. The project takes design inspiration from the open-source
 > [`ggprism`](https://github.com/csdaw/ggprism) package but contains an original
 > Python implementation and original palette data.
+
+## Common ways to use PyPrism Plot
+
+### Style every subsequent plot
+
+Call `use_prism()` once near the top of a script or notebook:
+
+```python
+import pyprism_plot as ppp
+
+ppp.use_prism()
+```
+
+### Style only part of a script
+
+Use `prism_context()` when you want the settings restored afterward:
+
+```python
+import matplotlib.pyplot as plt
+import pyprism_plot as ppp
+
+with ppp.prism_context(palette="floral", border=True):
+    fig, ax = plt.subplots()
+    ax.bar(["Control", "Drug A", "Drug B"], [2.2, 3.1, 4.4])
+    ax.set(ylabel="Response", title="Experiment results")
+```
+
+### Style an axes that already exists
+
+`style_axes()` works with plots made by Matplotlib or Seaborn:
+
+```python
+import seaborn as sns
+import pyprism_plot as ppp
+
+ax = sns.scatterplot(data=my_data, x="time", y="response", hue="treatment")
+ppp.style_axes(ax, minor_ticks=True)
+```
+
+### Use palettes and significance annotations
+
+```python
+import matplotlib.pyplot as plt
+import pyprism_plot as ppp
+
+values = [2.2, 3.1, 4.4, 5.0]
+fig, ax = plt.subplots()
+colors = ppp.get_palette("colorblind_safe", 4)
+ax.bar(range(4), values, color=colors)
+ppp.significance_bar(ax, 0, 3, y=5.2, text="p < 0.01")
+```
 
 ## Features
 
@@ -21,29 +100,7 @@ libraries you already use.
 - Significance brackets for common scientific figures
 - Native compatibility with Matplotlib and Seaborn
 
-## Install the development environment
-
-[Miniconda](https://docs.conda.io/projects/miniconda/en/latest/) is recommended.
-From the repository root:
-
-```bash
-conda env create -f environment.yml
-conda activate pyprism
-```
-
-To update an existing environment after dependency changes:
-
-```bash
-conda env update -n pyprism -f environment.yml --prune
-```
-
-For a minimal pip install instead:
-
-```bash
-python -m pip install -e .
-```
-
-## Quick start
+## Complete example
 
 ```python
 import matplotlib.pyplot as plt
@@ -62,9 +119,6 @@ with ppp.prism_context(palette="colorblind_safe"):
     fig.savefig("dose-response.svg")
 ```
 
-To style plots globally, call `ppp.use_prism()`. To modify one axes after it has
-been drawn, call `ppp.style_axes(ax, border=True, minor_ticks=True)`.
-
 See [`examples/gallery.py`](examples/gallery.py) for Matplotlib and Seaborn
 examples. Run it with:
 
@@ -72,7 +126,24 @@ examples. Run it with:
 python examples/gallery.py
 ```
 
-## Development
+## Development setup
+
+The Conda environment is for contributors and maintainers only. From a cloned
+repository:
+
+```bash
+conda env create -f environment.yml
+conda activate pyprism
+```
+
+Alternatively, create or activate any Python 3.10+ environment and install the
+development dependencies:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Run the project checks with:
 
 ```bash
 pytest
@@ -93,4 +164,3 @@ where they fit naturally rather than reproducing ggplot2 internals.
 ## License
 
 MIT. See [LICENSE](LICENSE).
-
