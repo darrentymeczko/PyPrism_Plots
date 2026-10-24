@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+### Fixed
+
+- With `autoscale=True`, `bar_dots()`, `grouped_bars()` and `xy_lines()` left
+  the axis limits at their previous values (for example `(0, 1)`) unless
+  replicate points were drawn. They now call `ax.autoscale_view()` after drawing.
+  Limits the caller fixed beforehand are still kept.
+
 ## 0.2.0
 
 ### Added

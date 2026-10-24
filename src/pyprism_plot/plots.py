@@ -316,7 +316,11 @@ def _saved_limits(ax: Axes, autoscale: bool) -> tuple[Any, Any] | None:
 def _apply_limits(
     ax: Axes, saved: tuple[Any, Any] | None, xlim: Any, ylim: Any
 ) -> None:
-    if saved is not None:
+    if saved is None:
+        # add_patch/add_line update dataLim but, unlike ax.bar/ax.plot, never
+        # request an autoscale, so the view would stay at its old limits.
+        ax.autoscale_view()
+    else:
         ax.set_xlim(saved[0])
         ax.set_ylim(saved[1])
     if xlim is not None:

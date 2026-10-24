@@ -621,3 +621,47 @@ def test_heatmap_validation(ax):
         ppp.heatmap(ax, [1, 2, 3])
     with pytest.raises(ValueError, match="same shape"):
         ppp.heatmap(ax, MATRIX, annotations=[["*"]])
+
+
+# --- autoscaling without scatter points -------------------------------------
+
+
+def _fresh_axes():
+    from matplotlib.figure import Figure
+
+    return Figure().add_axes((0.1, 0.1, 0.8, 0.8))
+
+
+def test_bar_dots_autoscales_without_points():
+    ax = _fresh_axes()
+    centre = [1, 2, 3, 4, 5, 6]
+    ppp.bar_dots(ax, None, centre=centre, points=False, errorbars=False)
+    assert ax.get_xlim() == pytest.approx((-0.58, 5.58))
+    assert ax.get_ylim() == pytest.approx((0, 6.3))
+    ax = _fresh_axes()
+    ppp.bar_dots(
+        ax, None, centre=centre, orientation="horizontal", shape="dot", err=0.5
+    )
+    assert ax.get_xlim()[1] > 6.5 and ax.get_ylim()[1] > 5
+
+
+def test_grouped_bars_autoscales_without_points():
+    ax = _fresh_axes()
+    ppp.grouped_bars(ax, [[None, None], [None, None]], centre=[[2, 3], [4, 5]])
+    assert ax.get_xlim()[0] < -0.16 and ax.get_xlim()[1] > 1.16
+    assert ax.get_ylim() == pytest.approx((0, 5.25))
+
+
+def test_xy_lines_autoscales_without_points():
+    ax = _fresh_axes()
+    ppp.xy_lines(ax, [0, 0.25, 0.5, 1, 2], {"a": [1, 2, 3, 4, 5]}, err={"a": 1})
+    assert ax.get_xlim() == pytest.approx((-0.1, 2.1))
+    assert ax.get_ylim() == pytest.approx((-0.3, 6.3))
+
+
+def test_autoscale_respects_limits_the_caller_already_fixed():
+    ax = _fresh_axes()
+    ax.set_ylim(0, 100)
+    ppp.bar_dots(ax, None, centre=[1, 2], points=False)
+    assert ax.get_ylim() == (0, 100)
+    assert ax.get_xlim() == pytest.approx((-0.38, 1.38))
