@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from numbers import Real
 from typing import Any
 
 import matplotlib as mpl
@@ -12,12 +14,20 @@ from matplotlib.axes import Axes
 
 from .palettes import get_palette
 
-_ANGLES = {0, 45, 90, 270}
+_HORIZONTAL_ALIGNMENTS = {"left", "center", "right"}
 
 
-def _validate_angle(angle: int) -> None:
-    if angle not in _ANGLES:
-        raise ValueError("axis_text_angle must be one of 0, 45, 90, or 270.")
+def _validate_angle(angle: float) -> None:
+    if (
+        isinstance(angle, bool)
+        or not isinstance(angle, Real)
+        or not math.isfinite(angle)
+    ):
+        raise ValueError("axis_text_angle must be a finite number of degrees.")
+
+
+def _font_list(base_family: str) -> list[str]:
+    return list(dict.fromkeys([base_family, "Arial", "DejaVu Sans"]))
 
 
 def prism_style(
@@ -28,9 +38,20 @@ def prism_style(
     base_fontweight: str = "bold",
     line_width: float | None = None,
     border: bool = False,
-    axis_text_angle: int = 0,
+    axis_text_angle: float = 0,
+    tight_save: bool = True,
+    explicit_fonts: bool = False,
 ) -> dict[str, Any]:
-    """Build a Matplotlib rcParams dictionary with a clean scientific style."""
+    """Build a Matplotlib rcParams dictionary with a clean scientific style.
+
+    ``tight_save=False`` keeps ``savefig.bbox`` at ``"standard"`` so fixed-size
+    pages are saved uncropped. ``explicit_fonts=True`` stores the concrete font
+    list in ``font.family`` instead of the generic ``"sans-serif"``, so text keeps
+    its font when a figure is drawn or saved outside the style context.
+
+    Matplotlib has no rcParam for tick-label rotation, so ``axis_text_angle`` is
+    only validated here; use :func:`style_axes` to rotate labels on an axes.
+    """
     _validate_angle(axis_text_angle)
     if base_size <= 0:
         raise ValueError("base_size must be greater than zero.")
@@ -54,7 +75,7 @@ def prism_style(
         "axes.titlesize": base_size * 1.2,
         "axes.titleweight": base_fontweight,
         "figure.facecolor": "white",
-        "font.family": "sans-serif",
+        "font.family": _font_list(base_family) if explicit_fonts else "sans-serif",
         "font.sans-serif": [base_family, "Arial", "DejaVu Sans", "sans-serif"],
         "font.size": base_size,
         "font.weight": base_fontweight,
@@ -63,7 +84,7 @@ def prism_style(
         "legend.title_fontsize": base_size * 0.8,
         "lines.linewidth": width * 1.5,
         "lines.markeredgewidth": width,
-        "savefig.bbox": "tight",
+        "savefig.bbox": "tight" if tight_save else "standard",
         "savefig.facecolor": "white",
         "xtick.direction": "out",
         "xtick.labelsize": base_size * 0.95,
@@ -97,12 +118,22 @@ def style_axes(
     *,
     palette: str = "colors",
     border: bool = False,
-    axis_text_angle: int = 0,
+    axis_text_angle: float = 0,
+    axis_text_ha: str | None = None,
     line_width: float = 1.0,
     minor_ticks: bool = False,
 ) -> Axes:
-    """Style one existing axes without changing global Matplotlib settings."""
+    """Style one existing axes without changing global Matplotlib settings.
+
+    ``axis_text_angle`` rotates the x tick labels by any angle in degrees. When
+    ``axis_text_ha`` is given (for example ``"right"`` for 45 degree category
+    labels), the labels use that alignment with ``rotation_mode="anchor"`` so the
+    end of each label sits on its tick. When it is omitted, rotated labels are
+    right-aligned and unrotated labels are centered, as in earlier versions.
+    """
     _validate_angle(axis_text_angle)
+    if axis_text_ha is not None and axis_text_ha not in _HORIZONTAL_ALIGNMENTS:
+        raise ValueError("axis_text_ha must be 'left', 'center', 'right', or None.")
     if line_width <= 0:
         raise ValueError("line_width must be greater than zero.")
 
@@ -119,9 +150,21 @@ def style_axes(
     ax.tick_params(which="major", length=5.6)
     ax.tick_params(which="minor", length=2.8)
     ax.tick_params(axis="x", labelrotation=axis_text_angle)
-    horizontal_alignment = "right" if axis_text_angle in {45, 90, 270} else "center"
+    if axis_text_ha is None:
+        horizontal_alignment = "center" if axis_text_angle % 360 == 0 else "right"
+        rotation_mode = None
+    else:
+        horizontal_alignment = axis_text_ha
+        rotation_mode = "anchor"
+        try:
+            # Matplotlib 3.10+ keeps the mode on ticks created after this call.
+            ax.tick_params(axis="x", labelrotation_mode=rotation_mode)
+        except ValueError:
+            pass
     for label in ax.get_xticklabels():
         label.set_horizontalalignment(horizontal_alignment)
+        if rotation_mode is not None:
+            label.set_rotation_mode(rotation_mode)
     if minor_ticks:
         ax.minorticks_on()
     else:

@@ -22,6 +22,7 @@ Thumbs.db
 
 # Generated example output
 examples/*.png
+!examples/pyprism_plots_gallery.png
 examples/*.pdf
 examples/*.svg
 

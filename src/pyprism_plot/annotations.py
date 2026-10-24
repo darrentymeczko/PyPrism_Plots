@@ -55,3 +55,55 @@ def significance_bar(
         clip_on=clip_on,
     )
     return line, label
+
+
+def significance_bar_h(
+    ax: Axes,
+    y1: float,
+    y2: float,
+    x: float,
+    text: str,
+    *,
+    height: float | None = None,
+    color: str = "black",
+    line_width: float = 1.5,
+    font_size: float | None = None,
+    text_offset: float | None = None,
+    clip_on: bool = False,
+) -> tuple[object, object]:
+    """Draw a comparison bracket for a horizontal graph.
+
+    The bracket spans ``y1`` to ``y2``. Its ticks start at ``x`` and point left
+    from a vertical spine at ``x + height``; the label sits to the right of the
+    spine, vertically centered. ``height`` and ``text_offset`` are in x data
+    coordinates and default to three and two-and-a-half percent of the current
+    x-axis span. ``font_size=None`` (the default) inherits Matplotlib's font size.
+    """
+    if y1 == y2:
+        raise ValueError("y1 and y2 must identify two different positions.")
+    if line_width <= 0:
+        raise ValueError("line_width must be greater than zero.")
+    if font_size is not None and font_size <= 0:
+        raise ValueError("font_size must be greater than zero or None.")
+    x_min, x_max = ax.get_xlim()
+    span = abs(x_max - x_min) or 1.0
+    bracket_height = span * 0.03 if height is None else height
+    offset = span * 0.025 if text_offset is None else text_offset
+    (line,) = ax.plot(
+        [x, x + bracket_height, x + bracket_height, x],
+        [y1, y1, y2, y2],
+        color=color,
+        linewidth=line_width,
+        clip_on=clip_on,
+    )
+    label = ax.text(
+        x + bracket_height + offset,
+        (y1 + y2) / 2,
+        text,
+        ha="left",
+        va="center",
+        color=color,
+        fontsize=font_size,
+        clip_on=clip_on,
+    )
+    return line, label

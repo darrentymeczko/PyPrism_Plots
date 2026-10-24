@@ -107,13 +107,143 @@ ppp.significance_bar(
 )
 ```
 
+For horizontal graphs, `significance_bar_h()` spans two y positions at a given x,
+with its ticks pointing left and the label to the right:
+
+```python
+ppp.significance_bar_h(ax, 0, 2, x=5.0, text="***", font_size=10)
+```
+
+### Fixed-size pages and tick labels
+
+`prism_style()`, `prism_context()`, and `use_prism()` accept two options for
+figures laid out on a page of fixed size:
+
+```python
+with ppp.prism_context(tight_save=False, explicit_fonts=True):
+    ...
+```
+
+- `tight_save=False` sets `savefig.bbox` to `"standard"`, so saving does not crop
+  the page.
+- `explicit_fonts=True` stores the concrete font list in `font.family`, so text
+  keeps its font when the figure is saved after the context exits.
+
+`style_axes()` rotates x tick labels by any angle. Pass `axis_text_ha="right"` to
+anchor the end of each label on its tick, which suits 45 degree category labels:
+
+```python
+ppp.style_axes(ax, axis_text_angle=45, axis_text_ha="right")
+```
+
+## Plotting functions
+
+PyPrism also draws the common Prism graph types. Each function takes an existing
+axes, draws only into it, and returns a small dataclass holding every artist it
+created, grouped per category or series (call `.artists()` for a flat list).
+Positions and widths are in data units, every style is a keyword argument, and
+`autoscale=False` leaves the axis limits alone. Text uses the rcParams in effect
+unless you pass `font_size`.
+
+Error bars follow Matplotlib's `yerr` convention: pass symmetric distances as
+`err=sd`, asymmetric distances as `err=(lower, upper)`, or absolute interval ends
+as `bounds=(low, high)`. NaN or `None` values are skipped without moving the
+other categories.
+
+![Examples of every plotting function](examples/pyprism_plots_gallery.png)
+
+### Columns with replicate points: `bar_dots`
+
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+import pyprism_plot as ppp
+
+reps = [np.array([1.8, 2.1, 2.3]), np.array([3.0, 3.4, 2.9]), None]
+fig, ax = plt.subplots()
+result = ppp.bar_dots(ax, reps, labels=["WT", "mutA", "mutB"])
+result.bars[0].set_gid("bar-WT")  # bars[i], errorbars[i], points[i], labels[i]
+```
+
+Bars are the category colour mixed with white (`tint=0.3`) with a full-colour
+edge; error bars are `#202020`; points are spread evenly (not randomly), so
+redraws match. Use `orientation="horizontal"` for bars that grow to the right,
+`shape="dot"` or `shape="line"` to mark the centre instead of drawing a column,
+and `centre=`/`err=`/`bounds=` to plot your own summary statistics:
+
+```python
+ppp.bar_dots(
+    ax,
+    reps,
+    orientation="horizontal",
+    positions=[0.0, 1.5, 3.0],
+    width=0.8,
+    centre=medians,
+    bounds=(q1, q3),
+)
+```
+
+### Grouped columns: `grouped_bars`
+
+`data[cluster][series]` holds replicates, or `None` for an empty slot. Artists
+are keyed by `(cluster, series)`, and `legend_handles` lets you place the legend
+yourself:
+
+```python
+result = ppp.grouped_bars(
+    ax,
+    [[wt_30, mut_30], [wt_37, None]],
+    cluster_labels=["30 °C", "37 °C"],
+    series_labels=["WT", "mutA"],
+)
+ax.legend(handles=result.legend_handles, loc="upper right")
+```
+
+### Lines with error bars: `xy_lines`
+
+Each series is a y array or a `(y, low, high)` tuple. NaN values break the line.
+Replicate points can be drawn behind the lines:
+
+```python
+result = ppp.xy_lines(
+    ax,
+    [1, 0.1, 0.01, 0.001],
+    {"WT": wt_mean, "mutA": (mut_median, mut_q1, mut_q3)},
+    err={"WT": wt_sem},
+    points={"WT": wt_replicates},  # one array of replicates per x
+    logx=True,
+)
+result.series["WT"].line.set_gid("line-WT")
+```
+
+### Heatmap with a colour bar: `heatmap`
+
+```python
+result = ppp.heatmap(
+    ax,
+    matrix,
+    row_labels=strains,
+    col_labels=conditions,
+    annotations=stars,  # matrix of strings, or True to print the values
+    cbar_ax=cax,  # optional: an axes you placed for the colour bar
+    cbar_label="log2 FC",
+)
+```
+
+The colormap is centred on `center=0` by default, NaN cells are light grey and
+labelled `n/a` when annotations are on, and the cell text switches between dark
+and light for contrast. Without `cbar_ax`, the colour bar goes in an inset to the
+right of the axes, so the axes keeps its size and position.
+
 ## Features
 
 - Clean white panels, bold typography, outward ticks, heavy axes, and no grid
 - Global, temporary-context, and single-axes styling APIs
 - Eight discrete palettes, including a color-vision-accessible option
 - Optional full panel borders and minor ticks
-- Significance brackets for common scientific figures
+- Significance brackets for vertical and horizontal graphs
+- Axes-level column, grouped column, XY line, and heatmap plots that return
+  every artist they draw
 - Native compatibility with Matplotlib and Seaborn
 
 ## Complete example
@@ -135,8 +265,9 @@ with ppp.prism_context(palette="colorblind_safe"):
     fig.savefig("dose-response.svg")
 ```
 
-See [`examples/gallery.py`](examples/gallery.py) for Matplotlib and Seaborn
-examples. Run it with:
+See [`examples/gallery.py`](examples/gallery.py) for Matplotlib, Seaborn, and
+plotting-function examples. Run it to write `examples/pyprism_gallery.png` and
+`examples/pyprism_plots_gallery.png`:
 
 ```bash
 python examples/gallery.py
