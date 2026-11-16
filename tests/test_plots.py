@@ -95,8 +95,8 @@ def test_bar_dots_honours_positions_and_width(ax):
         assert bar.get_height() == pytest.approx(values.mean())
 
 
-def test_bar_dots_default_look_and_mean_sd(ax):
-    result = ppp.bar_dots(ax, REPS, colors=["#2F6BFF", "red"])
+def test_bar_dots_classic_style_gives_the_0_2_look(ax):
+    result = ppp.bar_dots(ax, REPS, colors=["#2F6BFF", "red"], style="classic")
     bar = result.bars[0]
     assert bar.get_facecolor() == pytest.approx(ppp.tint_color("#2F6BFF", 0.3))
     assert bar.get_edgecolor() == pytest.approx(to_rgba("#2F6BFF"))
@@ -141,7 +141,9 @@ def test_bar_dots_nan_centre_and_error(ax):
 
 
 def test_bar_dots_asymmetric_err_sets_cap_positions(ax):
-    result = ppp.bar_dots(ax, None, centre=[3.0, 4.0], err=([0.5, 1.0], [1.0, 2.0]))
+    result = ppp.bar_dots(
+        ax, None, centre=[3.0, 4.0], err=([0.5, 1.0], [1.0, 2.0]), style="classic"
+    )
     (low0, high0), (low1, high1) = (e.caps for e in result.errorbars)
     assert low0.get_ydata()[0] == pytest.approx(2.5)
     assert high0.get_ydata()[0] == pytest.approx(4.0)
@@ -171,6 +173,7 @@ def test_bar_dots_horizontal_bars_grow_along_x(ax):
         orientation="horizontal",
         width=0.5,
         err=([0.5, 1.0], [1.0, 2.0]),
+        style="classic",
     )
     bar = result.bars[1]
     assert (bar.get_x(), bar.get_y()) == pytest.approx((0.0, 1.75))
@@ -237,7 +240,7 @@ def test_bar_dots_default_colors_follow_prism_palette(ax):
         result = ppp.bar_dots(ax, REPS)
     expected = ppp.get_palette("warm", 2)
     for bar, color in zip(result.bars, expected, strict=True):
-        assert bar.get_edgecolor() == pytest.approx(to_rgba(color))
+        assert bar.get_facecolor() == pytest.approx(to_rgba(color))
 
 
 def test_bar_dots_labels_and_font_size(ax):
@@ -308,9 +311,13 @@ def test_significance_bar_h_geometry(ax):
     line, label = ppp.significance_bar_h(ax, 0, 2, 8, "**")
     assert list(line.get_xdata()) == pytest.approx([8, 8.3, 8.3, 8])
     assert list(line.get_ydata()) == [0, 0, 2, 2]
-    assert label.get_position() == pytest.approx((8.55, 1.0))
+    assert label.get_position() == pytest.approx((8.43, 1.0))
     assert label.get_ha() == "left" and label.get_va() == "center"
-    assert label.get_fontsize() == pytest.approx(mpl.rcParams["font.size"])
+    assert label.get_fontsize() == pytest.approx(0.65 * mpl.rcParams["font.size"], 1e-3)
+    assert label.get_fontweight() == "normal"
+    _, classic = ppp.significance_bar_h(ax, 0, 2, 8, "**", style="classic")
+    assert classic.get_position() == pytest.approx((8.55, 1.0))
+    assert classic.get_fontsize() == pytest.approx(mpl.rcParams["font.size"])
 
 
 def test_significance_bar_h_custom_size(ax):

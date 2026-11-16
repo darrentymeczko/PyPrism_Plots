@@ -9,7 +9,8 @@ def test_prism_style_core_settings() -> None:
     style = prism_style(base_size=14, border=True)
     assert style["axes.grid"] is False
     assert style["axes.spines.top"] is True
-    assert style["axes.linewidth"] == 1
+    assert style["axes.linewidth"] == pytest.approx(72.27 / 25.4 * 72 / 96)
+    assert prism_style(style="classic")["axes.linewidth"] == 1
     assert theme_prism()["axes.facecolor"] == "white"
 
 
