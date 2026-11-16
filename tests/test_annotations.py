@@ -7,7 +7,7 @@ from pyprism_plot import significance_bar
 def test_significance_bar_adds_line_and_text() -> None:
     fig, ax = plt.subplots()
     ax.set_ylim(0, 10)
-    line, label = significance_bar(ax, 0, 1, 8, "p < 0.05")
+    line, label = significance_bar(ax, 0, 1, 8, "p < 0.05", style="classic")
     assert list(line.get_xdata()) == [0, 0, 1, 1]
     assert list(line.get_ydata()) == pytest.approx([8, 8.3, 8.3, 8])
     assert line.get_linewidth() == pytest.approx(1.5)

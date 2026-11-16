@@ -30,11 +30,27 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch, Rectangle
 from matplotlib.text import Text
 
+from .palettes import SHAPE_PALETTES, Shape
+from .theme import GGPLOT_TEXT_PT, STYLES
+
 ERROR_COLOR = "#202020"
+"""Error-bar colour of the classic (PyPrism 0.2) style."""
 XY_MARKERS = ("o", "s", "^", "D", "v")
+"""XY markers of the classic (PyPrism 0.2) style."""
+
+GGPLOT_STROKE_PT = 0.5 * (96 / 25.4) / 2 * 72 / 96
+"""ggplot2's default point ``stroke = 0.5`` in points (0.71 pt)."""
+PRISM_POINT_SIZE = (0.75 * (2 * GGPLOT_TEXT_PT + 0.5 * (96 / 25.4) / 2)) ** 2
+"""Scatter area (pt^2) of a ggplot2 ``size = 2`` point, as in ggprism's
+column scatter examples: a 5.0 pt diameter."""
+PRISM_MARKER_SIZE = 0.75 * (3 * GGPLOT_TEXT_PT + 0.5 * (96 / 25.4) / 2)
+"""Marker diameter (pt) of a ggplot2 ``size = 3`` point, as in ggprism's XY
+dose-response example: 7.1 pt."""
 
 _SHAPES = {"bar", "dot", "line"}
 _ORIENTATIONS = {"vertical", "horizontal"}
+_DIRECTIONS = {"both", "up"}
+_LINE_MARKERS = {"+", "x", "|", "_", "1", "2", "3", "4", "none", "None", ""}
 
 
 @dataclass
@@ -141,42 +157,6 @@ class HeatmapArtists:
         """Return the mesh, cell texts and tick labels (not the colour bar)."""
         cells = [text for row in self.texts for text in row]
         return _flatten([self.mesh], cells, self.row_labels, self.col_labels)
-
-
-@dataclass(frozen=True)
-class _CategoryStyle:
-    horizontal: bool
-    shape: str
-    tint: float
-    edge_color: Any
-    edge_width: float
-    err_color: Any
-    err_width: float
-    capsize: float
-    point_size: float
-    point_color: Any
-    point_edgecolor: Any
-    point_edgewidth: float
-    point_marker: str
-    dot_size: float
-    mean_line_width: float
-    baseline: float
-    zorder: float
-
-    def __post_init__(self) -> None:
-        if self.shape not in _SHAPES:
-            raise ValueError("shape must be 'bar', 'dot', or 'line'.")
-        if not 0 <= self.tint <= 1:
-            raise ValueError("tint must be between 0 and 1.")
-        _check_non_negative(
-            edge_width=self.edge_width,
-            err_width=self.err_width,
-            capsize=self.capsize,
-            point_size=self.point_size,
-            point_edgewidth=self.point_edgewidth,
-            dot_size=self.dot_size,
-            mean_line_width=self.mean_line_width,
-        )
 
 
 def _flatten(*groups: Any) -> list[Artist]:
@@ -316,7 +296,11 @@ def _saved_limits(ax: Axes, autoscale: bool) -> tuple[Any, Any] | None:
 def _apply_limits(
     ax: Axes, saved: tuple[Any, Any] | None, xlim: Any, ylim: Any
 ) -> None:
-    if saved is not None:
+    if saved is None:
+        # add_patch/add_line update dataLim but, unlike ax.bar/ax.plot, never
+        # request an autoscale, so the view would stay at its old limits.
+        ax.autoscale_view()
+    else:
         ax.set_xlim(saved[0])
         ax.set_ylim(saved[1])
     if xlim is not None:
@@ -343,6 +327,221 @@ def _set_category_labels(
     return list(axis.get_majorticklabels())
 
 
+class _Default:
+    """Sentinel for "use the default of the chosen ``style``"."""
+
+    _instance: _Default | None = None
+
+    def __new__(cls) -> _Default:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "DEFAULT"
+
+    def __reduce__(self) -> str:
+        return "DEFAULT"
+
+
+DEFAULT: Any = _Default()
+"""Default for style arguments: the value comes from the chosen ``style``.
+
+Passing ``None`` keeps its 0.2 meaning (for example ``edge_color=None`` is the
+category colour), so ``None`` and ``DEFAULT`` are different.
+"""
+
+_AUTO = "auto"
+
+
+def _axis_width() -> float:
+    return float(mpl.rcParams["axes.linewidth"])
+
+
+# Defaults per style. Callables are evaluated at call time, so "prism" sizes
+# follow the axes line width of the rcParams in effect (2.13 pt under
+# prism_style(base_size=14)). Sources are listed in docs/prism-defaults.md.
+_CATEGORY_DEFAULTS: dict[str, dict[str, Any]] = {
+    "prism": {
+        "tint": 1.0,
+        "edge_color": "black",
+        "edge_width": _axis_width,
+        "err_color": "black",
+        "err_width": _axis_width,
+        "capsize": None,
+        "cap_width": _AUTO,
+        "err_direction": "both",
+        "point_size": PRISM_POINT_SIZE,
+        "point_color": "black",
+        "point_edgecolor": _AUTO,
+        "point_edgewidth": _AUTO,
+        "point_marker": "default",
+        "mean_line_width": _axis_width,
+    },
+    "classic": {
+        "tint": 0.3,
+        "edge_color": None,
+        "edge_width": 1.3,
+        "err_color": ERROR_COLOR,
+        "err_width": 1.0,
+        "capsize": 3.0,
+        "cap_width": None,
+        "err_direction": "both",
+        "point_color": None,
+        "point_edgecolor": "black",
+        "point_edgewidth": 0.5,
+        "point_marker": "o",
+        "mean_line_width": 2.0,
+    },
+}
+
+_XY_DEFAULTS: dict[str, dict[str, Any]] = {
+    "prism": {
+        "markers": "default",
+        "marker_size": PRISM_MARKER_SIZE,
+        "marker_edgecolor": _AUTO,
+        "line_width": _axis_width,
+        "err_width": _axis_width,
+        "capsize": _AUTO,
+    },
+    "classic": {
+        "markers": XY_MARKERS,
+        "marker_size": 6.0,
+        "marker_edgecolor": None,
+        "line_width": 1.5,
+        "err_width": 1.0,
+        "capsize": 3.0,
+    },
+}
+
+
+def _check_style(style: str) -> None:
+    if style not in STYLES:
+        raise ValueError("style must be 'prism' or 'classic'.")
+
+
+def _resolve_defaults(
+    table: dict[str, dict[str, Any]], style: str, **given: Any
+) -> dict[str, Any]:
+    _check_style(style)
+    resolved = {}
+    for name, value in given.items():
+        if value is DEFAULT:
+            value = table[style][name]
+            value = value() if callable(value) else value
+        resolved[name] = value
+    return resolved
+
+
+def _as_shape(marker: Any) -> Shape:
+    if isinstance(marker, Shape):
+        return marker
+    line = marker in _LINE_MARKERS or (
+        isinstance(marker, tuple) and len(marker) >= 2 and marker[1] == 2
+    )
+    return Shape(str(marker), -1, marker, line=line)
+
+
+def _resolve_shapes(spec: Any, n: int) -> list[Shape]:
+    """Markers per item: a shape palette name, one marker, or a sequence."""
+    if isinstance(spec, str) and spec in SHAPE_PALETTES:
+        cycle = list(SHAPE_PALETTES[spec])
+    elif isinstance(spec, (str, Shape)) or (
+        isinstance(spec, tuple) and spec and isinstance(spec[0], int)
+    ):
+        cycle = [_as_shape(spec)]
+    else:
+        cycle = [_as_shape(marker) for marker in spec] or [_as_shape("none")]
+    return [cycle[i % len(cycle)] for i in range(n)]
+
+
+def _marker_colors(
+    shape: Shape, face: Any, edge: Any, edge_width: Any
+) -> tuple[Any, Any, float]:
+    """Face, edge and edge width for one marker, filling in ``"auto"`` values.
+
+    ggprism's solid shapes (pch 15-18) have no border, the outlined shapes
+    (pch 21-25) a black border, and line shapes are drawn in the colour, both
+    with ggplot2's default stroke.
+    """
+    if edge == _AUTO:
+        edge = "black" if shape.outlined else face
+    if edge_width == _AUTO:
+        edge_width = GGPLOT_STROKE_PT if (shape.outlined or shape.line) else 0.0
+    return face, edge, float(edge_width)
+
+
+@dataclass(frozen=True)
+class _CategoryStyle:
+    horizontal: bool
+    shape: str
+    tint: float
+    edge_color: Any
+    edge_width: float
+    err_color: Any
+    err_width: float
+    capsize: float | None
+    cap_width: float | None
+    err_direction: str
+    point_size: float
+    point_color: Any
+    point_edgecolor: Any
+    point_edgewidth: Any
+    dot_size: float
+    mean_line_width: float
+    baseline: float
+    zorder: float
+
+    def __post_init__(self) -> None:
+        if self.shape not in _SHAPES:
+            raise ValueError("shape must be 'bar', 'dot', or 'line'.")
+        if not 0 <= self.tint <= 1:
+            raise ValueError("tint must be between 0 and 1.")
+        if self.err_direction not in _DIRECTIONS:
+            raise ValueError("err_direction must be 'both' or 'up'.")
+        _check_non_negative(
+            edge_width=self.edge_width,
+            err_width=self.err_width,
+            capsize=self.capsize or 0,
+            cap_width=self.cap_width or 0,
+            point_size=self.point_size,
+            point_edgewidth=0
+            if self.point_edgewidth == _AUTO
+            else self.point_edgewidth,
+            dot_size=self.dot_size,
+            mean_line_width=self.mean_line_width,
+        )
+
+
+def _category_style(
+    style: str,
+    *,
+    horizontal: bool,
+    shape: str,
+    width: float,
+    dot_size: float,
+    baseline: float,
+    zorder: float,
+    **given: Any,
+) -> tuple[_CategoryStyle, Any]:
+    values = _resolve_defaults(_CATEGORY_DEFAULTS, style, **given)
+    marker = values.pop("point_marker")
+    if values["cap_width"] == _AUTO:
+        # ggprism's examples: geom_errorbar(width = 0.3) on 0.9-wide columns,
+        # so caps are a third of the column width -- unless capsize (points)
+        # was asked for explicitly.
+        values["cap_width"] = None if values["capsize"] is not None else width / 3
+    category_style = _CategoryStyle(
+        horizontal=horizontal,
+        shape=shape,
+        dot_size=dot_size,
+        baseline=baseline,
+        zorder=zorder,
+        **values,
+    )
+    return category_style, marker
+
+
 def _draw_errorbar(
     ax: Axes,
     position: float,
@@ -353,8 +552,9 @@ def _draw_errorbar(
     horizontal: bool,
     color: Any,
     line_width: float,
-    capsize: float,
+    capsize: float | None,
     zorder: float,
+    cap_width: float | None = None,
 ) -> ErrorBarArtists | None:
     if not np.isfinite(centre) or not (np.isfinite(lower) or np.isfinite(upper)):
         return None
@@ -374,20 +574,33 @@ def _draw_errorbar(
     ax.add_line(line)
     caps: list[Line2D | None] = []
     for end, size in ((centre - lower, lower), (centre + upper, upper)):
-        if size == 0 or capsize == 0:
+        if size == 0 or not (cap_width or capsize):
             caps.append(None)
             continue
-        cap_x, cap_y = _xy([position], [end], horizontal)
-        cap = Line2D(
-            cap_x,
-            cap_y,
-            linestyle="none",
-            marker="|" if horizontal else "_",
-            markersize=2 * capsize,
-            markeredgewidth=line_width,
-            color=color,
-            zorder=zorder,
-        )
+        if cap_width:
+            # A cap of fixed width in data units, centred on the whisker.
+            ends = [position - cap_width / 2, position + cap_width / 2]
+            cap_x, cap_y = _xy(ends, [end, end], horizontal)
+            cap = Line2D(
+                cap_x,
+                cap_y,
+                color=color,
+                linewidth=line_width,
+                solid_capstyle="butt",
+                zorder=zorder,
+            )
+        else:
+            cap_x, cap_y = _xy([position], [end], horizontal)
+            cap = Line2D(
+                cap_x,
+                cap_y,
+                linestyle="none",
+                marker="|" if horizontal else "_",
+                markersize=2 * capsize,
+                markeredgewidth=line_width,
+                color=color,
+                zorder=zorder,
+            )
         ax.add_line(cap)
         caps.append(cap)
     return ErrorBarArtists(line, (caps[0], caps[1]))
@@ -399,6 +612,7 @@ def _draw_summary(
     centre: float,
     width: float,
     color: Any,
+    marker: Shape,
     style: _CategoryStyle,
 ) -> Rectangle | Line2D:
     if style.shape == "bar":
@@ -421,15 +635,18 @@ def _draw_summary(
         return bar
     if style.shape == "dot":
         x, y = _xy([position], [centre], style.horizontal)
+        face, edge, edge_width = _marker_colors(
+            marker, color, style.point_edgecolor, style.point_edgewidth
+        )
         mark = Line2D(
             x,
             y,
             linestyle="none",
-            marker="o",
+            marker=marker.marker,
             markersize=style.dot_size,
-            markerfacecolor=color,
-            markeredgecolor=style.point_edgecolor,
-            markeredgewidth=style.point_edgewidth,
+            markerfacecolor=face,
+            markeredgecolor=edge,
+            markeredgewidth=edge_width,
             zorder=style.zorder + 3,
         )
     else:
@@ -453,21 +670,30 @@ def _draw_points(
     values: np.ndarray,
     jitter: float,
     color: Any,
+    marker: Shape,
     style: _CategoryStyle,
 ) -> PathCollection | None:
     if values.size == 0:
         return None
     offsets = position + _jitter_offsets(values.size, jitter)
     x, y = _xy(offsets, values, style.horizontal)
+    face = color if style.point_color is None else style.point_color
+    face, edge, edge_width = _marker_colors(
+        marker, face, style.point_edgecolor, style.point_edgewidth
+    )
+    colors = {"facecolors": face}
+    if not marker.line:
+        # Line-only markers are drawn in their face colour; Matplotlib warns
+        # when they also get an edge colour.
+        colors["edgecolors"] = edge
     return ax.scatter(
         x,
         y,
         s=style.point_size,
-        marker=style.point_marker,
-        facecolors=color if style.point_color is None else style.point_color,
-        edgecolors=style.point_edgecolor,
-        linewidths=style.point_edgewidth,
+        marker=marker.marker,
+        linewidths=edge_width,
         zorder=style.zorder + 1,
+        **colors,
     )
 
 
@@ -479,6 +705,7 @@ def _draw_categories(
     lower: np.ndarray,
     upper: np.ndarray,
     colors: list[Any],
+    markers: list[Shape],
     *,
     width: float,
     jitter: float,
@@ -489,28 +716,40 @@ def _draw_categories(
     errorbars: list[ErrorBarArtists | None] = []
     point_sets: list[PathCollection | None] = []
     for i, position in enumerate(positions):
-        has_centre = bool(np.isfinite(centres[i]))
+        centre = centres[i]
+        has_centre = bool(np.isfinite(centre))
         bars.append(
-            _draw_summary(ax, position, centres[i], width, colors[i], style)
+            _draw_summary(ax, position, centre, width, colors[i], markers[i], style)
             if has_centre
             else None
         )
+        low, high = lower[i], upper[i]
+        if style.err_direction == "up" and has_centre:
+            # Only the half pointing away from the baseline, as in Prism's
+            # "Above" direction for bars.
+            if centre >= style.baseline:
+                low = 0.0
+            else:
+                high = 0.0
         errorbars.append(
             _draw_errorbar(
                 ax,
                 position,
-                centres[i],
-                lower[i],
-                upper[i],
+                centre,
+                low,
+                high,
                 horizontal=style.horizontal,
                 color=style.err_color,
                 line_width=style.err_width,
                 capsize=style.capsize,
+                cap_width=style.cap_width,
                 zorder=style.zorder + 2,
             )
         )
         point_sets.append(
-            _draw_points(ax, position, replicates[i], jitter, colors[i], style)
+            _draw_points(
+                ax, position, replicates[i], jitter, colors[i], markers[i], style
+            )
             if points
             else None
         )
@@ -543,19 +782,21 @@ def bar_dots(
     shape: str = "bar",
     points: bool = True,
     jitter: float = 0.25,
-    tint: float = 0.3,
-    edge_color: Any = None,
-    edge_width: float = 1.3,
-    err_color: Any = ERROR_COLOR,
-    err_width: float = 1.0,
-    capsize: float = 3.0,
-    point_size: float = 18.0,
-    point_color: Any = None,
-    point_edgecolor: Any = "black",
-    point_edgewidth: float = 0.5,
-    point_marker: str = "o",
+    tint: float = DEFAULT,
+    edge_color: Any = DEFAULT,
+    edge_width: float = DEFAULT,
+    err_color: Any = DEFAULT,
+    err_width: float = DEFAULT,
+    capsize: float | None = DEFAULT,
+    cap_width: float | None = DEFAULT,
+    err_direction: str = DEFAULT,
+    point_size: float = DEFAULT,
+    point_color: Any = DEFAULT,
+    point_edgecolor: Any = DEFAULT,
+    point_edgewidth: float = DEFAULT,
+    point_marker: Any = DEFAULT,
     dot_size: float = 8.0,
-    mean_line_width: float = 2.0,
+    mean_line_width: float = DEFAULT,
     baseline: float = 0.0,
     zorder: float = 2.0,
     labels: Sequence[str] | None = None,
@@ -563,8 +804,17 @@ def bar_dots(
     autoscale: bool = True,
     xlim: tuple[float, float] | None = None,
     ylim: tuple[float, float] | None = None,
+    style: str = "prism",
 ) -> BarDotsArtists:
     """Draw one column per category with its replicate points on top.
+
+    With ``style="prism"`` (default) this is Prism's column bar graph with the
+    points shown: solid columns in the category colour with a black outline,
+    black mean ± SD error bars with caps a third of the column wide, and black
+    points in a different ggprism shape per column (circle, square, triangle,
+    diamond, ...). Line widths follow the axis line width in effect
+    (``rcParams["axes.linewidth"]``). ``style="classic"`` gives the PyPrism 0.2
+    look (pale tinted columns, coloured outlines, dark grey error bars).
 
     Parameters
     ----------
@@ -583,8 +833,9 @@ def bar_dots(
         symmetric distances or a ``(lower, upper)`` pair with shape ``(2, n)``;
         ``bounds`` is the absolute ``(low, high)`` ends instead. A NaN centre
         draws no column or error bar; a NaN error draws no error bar.
-    errorbars
-        ``False`` draws no error bars at all.
+    errorbars, err_direction
+        ``errorbars=False`` draws no error bars. ``err_direction="up"`` keeps only
+        the half pointing away from ``baseline`` (Prism's "Above").
     colors
         One colour, or a sequence cycled over categories (default: the
         ``axes.prop_cycle`` colours in effect).
@@ -592,10 +843,20 @@ def bar_dots(
         Column width and total point-spread width, in data units. Points are
         spread evenly in input order, so redraws are identical.
     shape
-        ``"bar"`` (tinted column), ``"dot"`` (centre as a marker) or ``"line"``
-        (a short centre line across ``width``, perpendicular to the value axis).
+        ``"bar"`` (column), ``"dot"`` (centre as a marker) or ``"line"`` (a short
+        centre line across ``width``, perpendicular to the value axis).
     tint
-        How much of the colour the column fill keeps after mixing with white.
+        How much of the colour the column fill keeps after mixing with white
+        (prism 1.0, classic 0.3).
+    capsize, cap_width
+        Cap length: ``cap_width`` in data units (prism default ``width / 3``) or
+        ``capsize`` as half the length in points, as in Matplotlib (classic 3).
+    point_marker
+        A marker, a sequence of markers cycled over categories, or a ggprism
+        shape palette name (``"default"``, ``"filled"``, ``"complete"``).
+    point_edgecolor, point_edgewidth
+        ``"auto"`` (prism default) gives the outlined shapes of the ``"filled"``
+        palette a black edge and solid shapes none.
     zorder
         Base z-order: columns at ``zorder``, points at ``+1``, error bars at
         ``+2`` and centre dots or lines at ``+3``.
@@ -606,31 +867,36 @@ def bar_dots(
         ``autoscale=False`` keeps the current axis limits fixed. ``xlim`` and
         ``ylim`` set the limits explicitly after drawing.
 
-    Capsize, marker and dot sizes are in points; ``point_size`` is in points
-    squared, as in :meth:`~matplotlib.axes.Axes.scatter`.
+    Arguments left at ``DEFAULT`` take the value of ``style``; see
+    ``docs/prism-defaults.md``. Capsize, marker and dot sizes are in points;
+    ``point_size`` is in points squared, as in :meth:`~matplotlib.axes.Axes.scatter`.
     """
     horizontal = _check_orientation(orientation)
     if width <= 0:
         raise ValueError("width must be greater than zero.")
     _check_non_negative(jitter=jitter)
-    style = _CategoryStyle(
+    category_style, marker = _category_style(
+        style,
         horizontal=horizontal,
         shape=shape,
+        width=width,
+        dot_size=dot_size,
+        baseline=baseline,
+        zorder=zorder,
         tint=tint,
         edge_color=edge_color,
         edge_width=edge_width,
         err_color=err_color,
         err_width=err_width,
         capsize=capsize,
-        point_size=point_size,
+        cap_width=cap_width,
+        err_direction=err_direction,
+        point_size=_classic_size(point_size, style, 18.0),
         point_color=point_color,
         point_edgecolor=point_edgecolor,
         point_edgewidth=point_edgewidth,
         point_marker=point_marker,
-        dot_size=dot_size,
         mean_line_width=mean_line_width,
-        baseline=baseline,
-        zorder=zorder,
     )
     if values is None:
         if centre is None:
@@ -652,14 +918,20 @@ def bar_dots(
         lower,
         upper,
         _resolve_colors(colors, n),
+        _resolve_shapes(marker, n),
         width=width,
         jitter=jitter,
         points=points,
-        style=style,
+        style=category_style,
     )
     _apply_limits(ax, saved, xlim, ylim)
     texts = _set_category_labels(ax, category_positions, labels, horizontal, font_size)
     return BarDotsArtists(bars, errs, point_sets, texts)
+
+
+def _classic_size(value: Any, style: str, classic: float) -> Any:
+    """Point sizes differ between functions in the classic style only."""
+    return classic if value is DEFAULT and style == "classic" else value
 
 
 def _grid(value: Any, clusters: int, series: int, name: str) -> list[list[Any]]:
@@ -714,19 +986,21 @@ def grouped_bars(
     shape: str = "bar",
     points: bool = True,
     jitter: float | None = None,
-    tint: float = 0.3,
-    edge_color: Any = None,
-    edge_width: float = 1.3,
-    err_color: Any = ERROR_COLOR,
-    err_width: float = 1.0,
-    capsize: float = 3.0,
-    point_size: float = 14.0,
-    point_color: Any = None,
-    point_edgecolor: Any = "black",
-    point_edgewidth: float = 0.5,
-    point_marker: str = "o",
+    tint: float = DEFAULT,
+    edge_color: Any = DEFAULT,
+    edge_width: float = DEFAULT,
+    err_color: Any = DEFAULT,
+    err_width: float = DEFAULT,
+    capsize: float | None = DEFAULT,
+    cap_width: float | None = DEFAULT,
+    err_direction: str = DEFAULT,
+    point_size: float = DEFAULT,
+    point_color: Any = DEFAULT,
+    point_edgecolor: Any = DEFAULT,
+    point_edgewidth: float = DEFAULT,
+    point_marker: Any = DEFAULT,
     dot_size: float = 7.0,
-    mean_line_width: float = 2.0,
+    mean_line_width: float = DEFAULT,
     baseline: float = 0.0,
     zorder: float = 2.0,
     cluster_labels: Sequence[str] | None = None,
@@ -736,6 +1010,7 @@ def grouped_bars(
     autoscale: bool = True,
     xlim: tuple[float, float] | None = None,
     ylim: tuple[float, float] | None = None,
+    style: str = "prism",
 ) -> GroupedBarsArtists:
     """Draw clusters of side-by-side columns, one column per series.
 
@@ -748,10 +1023,12 @@ def grouped_bars(
     Series ``s`` is centred at ``cluster_position + (s - (n_series - 1) / 2) *
     series_width``. Columns are ``bar_width`` wide (default ``series_width``) and
     points spread over ``jitter`` (default 40 % of the column width). ``colors``
-    are per series. Other style parameters match :func:`bar_dots`.
+    and point shapes (ggprism's ``"default"`` shape palette) are per series.
+    Other style parameters match :func:`bar_dots`.
 
     ``legend_handles`` are proxy artists matching each series' style, labelled
-    from ``series_labels``; ``legend=True`` also adds an axes legend with them.
+    from ``series_labels``; ``legend=True`` also adds an axes legend with them
+    (plain legend text in the prism style, as ggprism's ``legend.text``).
     """
     horizontal = _check_orientation(orientation)
     if series_width <= 0:
@@ -761,24 +1038,28 @@ def grouped_bars(
         raise ValueError("bar_width must be greater than zero.")
     spread = 0.4 * width if jitter is None else jitter
     _check_non_negative(jitter=spread)
-    style = _CategoryStyle(
+    category_style, marker = _category_style(
+        style,
         horizontal=horizontal,
         shape=shape,
+        width=width,
+        dot_size=dot_size,
+        baseline=baseline,
+        zorder=zorder,
         tint=tint,
         edge_color=edge_color,
         edge_width=edge_width,
         err_color=err_color,
         err_width=err_width,
         capsize=capsize,
-        point_size=point_size,
+        cap_width=cap_width,
+        err_direction=err_direction,
+        point_size=_classic_size(point_size, style, 14.0),
         point_color=point_color,
         point_edgecolor=point_edgecolor,
         point_edgewidth=point_edgewidth,
         point_marker=point_marker,
-        dot_size=dot_size,
         mean_line_width=mean_line_width,
-        baseline=baseline,
-        zorder=zorder,
     )
     n_clusters = len(data)
     n_series = max((len(row) for row in data if row is not None), default=0)
@@ -791,6 +1072,7 @@ def grouped_bars(
     bound_pairs = _grid_pairs(bounds, n_clusters, n_series, "bounds")
     clusters = _positions(cluster_positions, n_clusters, "cluster_positions")
     series_colors = _resolve_colors(colors, n_series)
+    series_markers = _resolve_shapes(marker, n_series)
 
     saved = _saved_limits(ax, autoscale)
     result = GroupedBarsArtists({}, {}, {}, [], [])
@@ -808,10 +1090,11 @@ def grouped_bars(
             lower,
             upper,
             [series_colors[s]] * n_clusters,
+            [series_markers[s]] * n_clusters,
             width=width,
             jitter=spread,
             points=points,
-            style=style,
+            style=category_style,
         )
         for c in range(n_clusters):
             for target, artist in (
@@ -822,17 +1105,22 @@ def grouped_bars(
                 if artist is not None:
                     target[(c, s)] = artist
         label = series_labels[s] if series_labels else f"Series {s + 1}"
-        result.legend_handles.append(_legend_handle(series_colors[s], label, style))
+        result.legend_handles.append(
+            _legend_handle(series_colors[s], series_markers[s], label, category_style)
+        )
     _apply_limits(ax, saved, xlim, ylim)
     result.labels = _set_category_labels(
         ax, clusters, cluster_labels, horizontal, font_size
     )
     if legend:
-        result.legend = ax.legend(handles=result.legend_handles)
+        kwargs = {"prop": {"weight": "normal"}} if style == "prism" else {}
+        result.legend = ax.legend(handles=result.legend_handles, **kwargs)
     return result
 
 
-def _legend_handle(color: Any, label: str, style: _CategoryStyle) -> Patch | Line2D:
+def _legend_handle(
+    color: Any, marker: Shape, label: str, style: _CategoryStyle
+) -> Patch | Line2D:
     if style.shape == "bar":
         return Patch(
             facecolor=tint_color(color, style.tint),
@@ -841,30 +1129,29 @@ def _legend_handle(color: Any, label: str, style: _CategoryStyle) -> Patch | Lin
             label=label,
         )
     if style.shape == "dot":
+        face, edge, edge_width = _marker_colors(
+            marker, color, style.point_edgecolor, style.point_edgewidth
+        )
         return Line2D(
             [],
             [],
             linestyle="none",
-            marker="o",
+            marker=marker.marker,
             markersize=style.dot_size,
-            markerfacecolor=color,
-            markeredgecolor=style.point_edgecolor,
-            markeredgewidth=style.point_edgewidth,
+            markerfacecolor=face,
+            markeredgecolor=edge,
+            markeredgewidth=edge_width,
             label=label,
         )
     return Line2D([], [], color=color, linewidth=style.mean_line_width, label=label)
 
 
-def _resolve_markers(markers: Any, n: int) -> list[str]:
+def _resolve_markers(markers: Any, n: int) -> list[Shape]:
     if markers is True:
-        cycle: Sequence[str] = XY_MARKERS
-    elif markers is False or markers is None:
-        cycle = ["none"]
-    elif isinstance(markers, str):
-        cycle = [markers]
-    else:
-        cycle = list(markers) or ["none"]
-    return [cycle[i % len(cycle)] for i in range(n)]
+        markers = "default"
+    if markers is False or markers is None:
+        return [_as_shape("none")] * n
+    return _resolve_shapes(markers, n)
 
 
 def xy_lines(
@@ -875,11 +1162,12 @@ def xy_lines(
     err: Mapping[str, Any] | None = None,
     colors: Any = None,
     markers: Any = True,
-    marker_size: float = 6.0,
-    line_width: float = 1.5,
+    marker_size: float = DEFAULT,
+    marker_edgecolor: Any = DEFAULT,
+    line_width: float = DEFAULT,
     err_color: Any = None,
-    err_width: float = 1.0,
-    capsize: float = 3.0,
+    err_width: float = DEFAULT,
+    capsize: float = DEFAULT,
     points: Mapping[str, Any] | None = None,
     jitter: float = 0.0,
     point_size: float = 12.0,
@@ -891,8 +1179,15 @@ def xy_lines(
     autoscale: bool = True,
     xlim: tuple[float, float] | None = None,
     ylim: tuple[float, float] | None = None,
+    style: str = "prism",
 ) -> XYLinesArtists:
     """Draw one line with markers and error bars per series against shared x.
+
+    With ``style="prism"`` (default) each series gets the next shape of ggprism's
+    ``"default"`` shape palette (circle, square, triangle, diamond, ...), filled
+    in the series colour, a line in the series colour at the axis line width,
+    and error bars in the same colour and width with caps as wide as the marker.
+    ``style="classic"`` gives the PyPrism 0.2 look.
 
     Parameters
     ----------
@@ -905,10 +1200,18 @@ def xy_lines(
         Optional map from series name to error distances for series given as
         plain y: symmetric, or a ``(lower, upper)`` pair with shape ``(2, n)``.
     markers
-        ``True`` cycles through filled circle, square, triangle, diamond and
-        down-triangle; ``False`` draws none; a string or sequence picks them.
+        ``True`` uses the style's markers (prism: ggprism's ``"default"`` shape
+        palette; classic: circle, square, triangle, diamond, down-triangle);
+        ``False`` draws none; a shape palette name (``"default"``, ``"filled"``,
+        ``"complete"``), a marker or a sequence picks them.
+    marker_size, marker_edgecolor
+        Marker size in points (prism 7, ggplot2 ``size = 3``). The edge is
+        ``"auto"`` in the prism style: black for the outlined shapes of the
+        ``"filled"`` palette, the series colour otherwise.
     err_color
         Error-bar colour (default: the series colour).
+    capsize
+        Half the cap length in points (prism: half the marker size).
     points
         Optional map from series name to replicates per x value (a ragged
         sequence or a 2-D ``(n_x, n_replicates)`` array), drawn behind the lines
@@ -920,13 +1223,27 @@ def xy_lines(
     zorder
         Base z-order: points at ``zorder``, error bars at ``+1``, lines at ``+2``.
     """
-    if not 0 <= point_tint <= 1:
-        raise ValueError("point_tint must be between 0 and 1.")
-    _check_non_negative(
+    if markers is True:
+        markers = DEFAULT
+    values = _resolve_defaults(
+        _XY_DEFAULTS,
+        style,
+        markers=markers,
         marker_size=marker_size,
+        marker_edgecolor=marker_edgecolor,
         line_width=line_width,
         err_width=err_width,
         capsize=capsize,
+    )
+    if values["capsize"] == _AUTO:
+        values["capsize"] = values["marker_size"] / 2
+    if not 0 <= point_tint <= 1:
+        raise ValueError("point_tint must be between 0 and 1.")
+    _check_non_negative(
+        marker_size=values["marker_size"],
+        line_width=values["line_width"],
+        err_width=values["err_width"],
+        capsize=values["capsize"],
         jitter=jitter,
         point_size=point_size,
         point_edgewidth=point_edgewidth,
@@ -942,7 +1259,7 @@ def xy_lines(
         raise ValueError(f"err/points name unknown series: {sorted(unknown)}.")
     names = list(series)
     colors_by_series = _resolve_colors(colors, len(names))
-    markers_by_series = _resolve_markers(markers, len(names))
+    markers_by_series = _resolve_markers(values["markers"], len(names))
 
     if logx:
         ax.set_xscale("log")
@@ -951,6 +1268,7 @@ def xy_lines(
     for index, name in enumerate(names):
         value = series[name]
         color = colors_by_series[index]
+        marker = markers_by_series[index]
         if isinstance(value, tuple) and len(value) == 3 and np.ndim(value[0]) == 1:
             y = _per_item(value[0], n, f"series {name!r}")
             if name in err:
@@ -970,6 +1288,7 @@ def xy_lines(
                 logx=logx,
                 jitter=jitter,
                 size=point_size,
+                marker=marker.marker if style == "prism" else "o",
                 face=tint_color(color, point_tint),
                 edge=point_edgecolor,
                 edge_width=point_edgewidth,
@@ -984,24 +1303,31 @@ def xy_lines(
                 upper[i],
                 horizontal=False,
                 color=color if err_color is None else err_color,
-                line_width=err_width,
-                capsize=capsize,
+                line_width=values["err_width"],
+                capsize=values["capsize"],
                 zorder=zorder + 1,
             )
             for i in range(n)
         ]
+        edge = values["marker_edgecolor"]
+        if edge == _AUTO:
+            edge = "black" if marker.outlined else color
         line = Line2D(
             x_values,
             y,
             color=color,
-            linewidth=line_width,
-            marker=markers_by_series[index],
-            markersize=marker_size,
+            linewidth=values["line_width"],
+            marker=marker.marker,
+            markersize=values["marker_size"],
             markerfacecolor=color,
-            markeredgecolor=color,
+            markeredgecolor=color if edge is None else edge,
             label=name,
             zorder=zorder + 2,
         )
+        if style == "prism":
+            line.set_markeredgewidth(
+                GGPLOT_STROKE_PT if (marker.outlined or marker.line) else 0.0
+            )
         ax.add_line(line)
         result.series[name] = XYSeriesArtists(line, errorbar_set, point_set)
     _apply_limits(ax, saved, xlim, ylim)
@@ -1016,6 +1342,7 @@ def _draw_xy_points(
     logx: bool,
     jitter: float,
     size: float,
+    marker: Any,
     face: Any,
     edge: Any,
     edge_width: float,
@@ -1035,6 +1362,7 @@ def _draw_xy_points(
         np.concatenate(xs),
         np.concatenate(ys),
         s=size,
+        marker=marker,
         facecolors=face,
         edgecolors=edge,
         linewidths=edge_width,

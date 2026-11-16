@@ -95,8 +95,8 @@ def test_bar_dots_honours_positions_and_width(ax):
         assert bar.get_height() == pytest.approx(values.mean())
 
 
-def test_bar_dots_default_look_and_mean_sd(ax):
-    result = ppp.bar_dots(ax, REPS, colors=["#2F6BFF", "red"])
+def test_bar_dots_classic_style_gives_the_0_2_look(ax):
+    result = ppp.bar_dots(ax, REPS, colors=["#2F6BFF", "red"], style="classic")
     bar = result.bars[0]
     assert bar.get_facecolor() == pytest.approx(ppp.tint_color("#2F6BFF", 0.3))
     assert bar.get_edgecolor() == pytest.approx(to_rgba("#2F6BFF"))
@@ -141,7 +141,9 @@ def test_bar_dots_nan_centre_and_error(ax):
 
 
 def test_bar_dots_asymmetric_err_sets_cap_positions(ax):
-    result = ppp.bar_dots(ax, None, centre=[3.0, 4.0], err=([0.5, 1.0], [1.0, 2.0]))
+    result = ppp.bar_dots(
+        ax, None, centre=[3.0, 4.0], err=([0.5, 1.0], [1.0, 2.0]), style="classic"
+    )
     (low0, high0), (low1, high1) = (e.caps for e in result.errorbars)
     assert low0.get_ydata()[0] == pytest.approx(2.5)
     assert high0.get_ydata()[0] == pytest.approx(4.0)
@@ -171,6 +173,7 @@ def test_bar_dots_horizontal_bars_grow_along_x(ax):
         orientation="horizontal",
         width=0.5,
         err=([0.5, 1.0], [1.0, 2.0]),
+        style="classic",
     )
     bar = result.bars[1]
     assert (bar.get_x(), bar.get_y()) == pytest.approx((0.0, 1.75))
@@ -237,7 +240,7 @@ def test_bar_dots_default_colors_follow_prism_palette(ax):
         result = ppp.bar_dots(ax, REPS)
     expected = ppp.get_palette("warm", 2)
     for bar, color in zip(result.bars, expected, strict=True):
-        assert bar.get_edgecolor() == pytest.approx(to_rgba(color))
+        assert bar.get_facecolor() == pytest.approx(to_rgba(color))
 
 
 def test_bar_dots_labels_and_font_size(ax):
@@ -308,9 +311,13 @@ def test_significance_bar_h_geometry(ax):
     line, label = ppp.significance_bar_h(ax, 0, 2, 8, "**")
     assert list(line.get_xdata()) == pytest.approx([8, 8.3, 8.3, 8])
     assert list(line.get_ydata()) == [0, 0, 2, 2]
-    assert label.get_position() == pytest.approx((8.55, 1.0))
+    assert label.get_position() == pytest.approx((8.43, 1.0))
     assert label.get_ha() == "left" and label.get_va() == "center"
-    assert label.get_fontsize() == pytest.approx(mpl.rcParams["font.size"])
+    assert label.get_fontsize() == pytest.approx(0.65 * mpl.rcParams["font.size"], 1e-3)
+    assert label.get_fontweight() == "normal"
+    _, classic = ppp.significance_bar_h(ax, 0, 2, 8, "**", style="classic")
+    assert classic.get_position() == pytest.approx((8.55, 1.0))
+    assert classic.get_fontsize() == pytest.approx(mpl.rcParams["font.size"])
 
 
 def test_significance_bar_h_custom_size(ax):
@@ -621,3 +628,47 @@ def test_heatmap_validation(ax):
         ppp.heatmap(ax, [1, 2, 3])
     with pytest.raises(ValueError, match="same shape"):
         ppp.heatmap(ax, MATRIX, annotations=[["*"]])
+
+
+# --- autoscaling without scatter points -------------------------------------
+
+
+def _fresh_axes():
+    from matplotlib.figure import Figure
+
+    return Figure().add_axes((0.1, 0.1, 0.8, 0.8))
+
+
+def test_bar_dots_autoscales_without_points():
+    ax = _fresh_axes()
+    centre = [1, 2, 3, 4, 5, 6]
+    ppp.bar_dots(ax, None, centre=centre, points=False, errorbars=False)
+    assert ax.get_xlim() == pytest.approx((-0.58, 5.58))
+    assert ax.get_ylim() == pytest.approx((0, 6.3))
+    ax = _fresh_axes()
+    ppp.bar_dots(
+        ax, None, centre=centre, orientation="horizontal", shape="dot", err=0.5
+    )
+    assert ax.get_xlim()[1] > 6.5 and ax.get_ylim()[1] > 5
+
+
+def test_grouped_bars_autoscales_without_points():
+    ax = _fresh_axes()
+    ppp.grouped_bars(ax, [[None, None], [None, None]], centre=[[2, 3], [4, 5]])
+    assert ax.get_xlim()[0] < -0.16 and ax.get_xlim()[1] > 1.16
+    assert ax.get_ylim() == pytest.approx((0, 5.25))
+
+
+def test_xy_lines_autoscales_without_points():
+    ax = _fresh_axes()
+    ppp.xy_lines(ax, [0, 0.25, 0.5, 1, 2], {"a": [1, 2, 3, 4, 5]}, err={"a": 1})
+    assert ax.get_xlim() == pytest.approx((-0.1, 2.1))
+    assert ax.get_ylim() == pytest.approx((-0.3, 6.3))
+
+
+def test_autoscale_respects_limits_the_caller_already_fixed():
+    ax = _fresh_axes()
+    ax.set_ylim(0, 100)
+    ppp.bar_dots(ax, None, centre=[1, 2], points=False)
+    assert ax.get_ylim() == (0, 100)
+    assert ax.get_xlim() == pytest.approx((-0.38, 1.38))

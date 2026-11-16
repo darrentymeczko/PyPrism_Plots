@@ -14,6 +14,16 @@ environment you already use:
 python -m pip install git+https://github.com/darrentymeczko/PyPrism_Plots.git
 ```
 
+No Git on your computer? Install the same code from its ZIP instead:
+
+```bash
+python -m pip install https://github.com/darrentymeczko/PyPrism_Plots/archive/refs/heads/main.zip
+```
+
+Python 3.10+ is required; Matplotlib, NumPy and pandas are installed automatically. In a
+Jupyter notebook, run `%pip install ...` in a cell so the package goes into the notebook's
+own Python.
+
 Then import it alongside Matplotlib and call its functions directly:
 
 ```python
@@ -35,9 +45,11 @@ is `pyprism_plot`.
 > [!NOTE]
 > This independent open-source project is not affiliated with, endorsed by, or
 > sponsored by GraphPad Software. GraphPad and Prism are trademarks of their
-> respective owner. The project takes design inspiration from the open-source
-> [`ggprism`](https://github.com/csdaw/ggprism) package but contains an original
-> Python implementation and original palette data.
+> respective owner. The project follows the open-source
+> [`ggprism`](https://github.com/csdaw/ggprism) package (GPL-3) with an original
+> Python implementation. Its colour, fill and shape palettes are ggprism's palette
+> data (which ggprism took from GraphPad Prism's colour schemes); see
+> `src/pyprism_plot/_ggprism_palettes.py`.
 
 ## Common ways to use PyPrism Plot
 
@@ -136,6 +148,29 @@ anchor the end of each label on its tick, which suits 45 degree category labels:
 ppp.style_axes(ax, axis_text_angle=45, axis_text_ha="right")
 ```
 
+### The Prism look, offset axes and minor ticks
+
+Sizes follow ggprism's `theme_prism(base_size, base_line_size)`. Axis lines and
+ticks are `base_line_size × 2.134` pt (2.13 pt at the default `base_size=14`; one
+ggplot2 linewidth unit is 0.75 mm). Ticks point out and are `base_size / 2.5` pt
+long, minor ticks `base_size / 5`. All text is bold black Arial, and there is no
+grid and no legend frame.
+
+`style_axes()` adds ggprism's axis guides. `offset=` gives `guide_prism_offset`:
+the axis line stops at the outermost ticks and the axes move apart so they don't
+meet at the corner. `minor_ticks=` gives `guide_prism_minor`, with one minor tick
+between major ticks (2-9 per decade on log axes). Both are off by default, as in
+`theme_prism()`:
+
+```python
+ppp.style_axes(ax, offset="y", minor_ticks="y")
+```
+
+Every default and its source is listed in
+[`docs/prism-defaults.md`](docs/prism-defaults.md). Pass `style="classic"` to any
+plotting function, `prism_style()` or `style_axes()` to get the PyPrism 0.2 look
+back.
+
 ## Plotting functions
 
 PyPrism also draws the common Prism graph types. Each function takes an existing
@@ -165,9 +200,14 @@ result = ppp.bar_dots(ax, reps, labels=["WT", "mutA", "mutB"])
 result.bars[0].set_gid("bar-WT")  # bars[i], errorbars[i], points[i], labels[i]
 ```
 
-Bars are the category colour mixed with white (`tint=0.3`) with a full-colour
-edge; error bars are `#202020`; points are spread evenly (not randomly), so
-redraws match. Use `orientation="horizontal"` for bars that grow to the right,
+By default this is Prism's column bar graph with the points shown:
+- solid columns in the palette colour with a black outline at the axis line width
+- black mean ± SD error bars with caps a third of the column wide
+- black points in ggprism's shapes, a different shape per column (circle, square,
+  triangle, diamond, ...)
+
+`err_direction="up"` keeps only the upper half of each error bar. Points are
+spread evenly (not randomly), so redraws match. Use `orientation="horizontal"` for bars that grow to the right,
 `shape="dot"` or `shape="line"` to mark the centre instead of drawing a column,
 and `centre=`/`err=`/`bounds=` to plot your own summary statistics:
 
@@ -239,8 +279,8 @@ right of the axes, so the axes keeps its size and position.
 
 - Clean white panels, bold typography, outward ticks, heavy axes, and no grid
 - Global, temporary-context, and single-axes styling APIs
-- Eight discrete palettes, including a color-vision-accessible option
-- Optional full panel borders and minor ticks
+- All of ggprism's colour, fill and shape palettes, plus PyPrism's own
+- Optional full panel borders, minor ticks and Prism's offset axes
 - Significance brackets for vertical and horizontal graphs
 - Axes-level column, grouped column, XY line, and heatmap plots that return
   every artist they draw
